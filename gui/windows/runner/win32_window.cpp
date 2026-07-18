@@ -19,6 +19,13 @@ namespace {
 
     using EnableNonClientDpiScaling = BOOL __stdcall(HWND hwnd);
 
+// Detect if running under Wine/Winlator by checking for ntdll!wine_get_version
+    bool IsRunningUnderWine() {
+        HMODULE ntdll = GetModuleHandleA("ntdll.dll");
+        if (!ntdll) return false;
+        return GetProcAddress(ntdll, "wine_get_version") != nullptr;
+    }
+
 // Scale helper to convert logical scaler values to physical using passed in
 // scale factor
     int Scale(int source, double scale_factor) {
@@ -28,6 +35,10 @@ namespace {
 // Dynamically loads the |EnableNonClientDpiScaling| from the User32 module.
 // This API is only needed for PerMonitor V1 awareness mode.
     void EnableFullDpiSupportIfAvailable(HWND hwnd) {
+        // Skip DPI scaling APIs on Wine - they are not fully implemented
+        // and can cause incorrect window sizing leading to black/empty content
+        if (IsRunningUnderWine()) return;
+
         HMODULE user32_module = LoadLibraryA("User32.dll");
         if (!user32_module) {
             return;
@@ -116,11 +127,16 @@ bool Win32Window::CreateAndShow(const std::wstring &title,
     const wchar_t *window_class =
             WindowClassRegistrar::GetInstance()->GetWindowClass();
 
-    const POINT target_point = {static_cast<LONG>(origin.x),
-                                static_cast<LONG>(origin.y)};
-    HMONITOR monitor = MonitorFromPoint(target_point, MONITOR_DEFAULTTONEAREST);
-    UINT dpi = FlutterDesktopGetDpiForMonitor(monitor);
-    double scale_factor = dpi / 96.0;
+    double scale_factor = 1.0;
+    if (!IsRunningUnderWine()) {
+        // Only query real DPI on native Windows
+        // Wine/Winlator may return bogus DPI values causing wrong window size
+        const POINT target_point = {static_cast<LONG>(origin.x),
+                                    static_cast<LONG>(origin.y)};
+        HMONITOR monitor = MonitorFromPoint(target_point, MONITOR_DEFAULTTONEAREST);
+        UINT dpi = FlutterDesktopGetDpiForMonitor(monitor);
+        scale_factor = dpi / 96.0;
+    }
 
     HWND window = CreateWindow(
             window_class,
@@ -138,6 +154,14 @@ bool Win32Window::CreateAndShow(const std::wstring &title,
 
     if (!window) {
         return false;
+    }
+
+    // On Wine/Winlator, force an immediate redraw to prevent black screen
+    // The Flutter surface may not paint correctly on first frame in Wine
+    if (IsRunningUnderWine()) {
+        ShowWindow(window, SW_SHOWNORMAL);
+        UpdateWindow(window);
+        InvalidateRect(window, nullptr, TRUE);
     }
 
     return OnCreate();
@@ -186,7 +210,12 @@ Win32Window::MessageHandler(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         case WM_SIZE: {
             auto rect = GetClientArea();
             if (child_content_ != nullptr) {
-                MoveWindow(child_content_, rect.left, rect.top, rect.right - rect.left,rect.bottom - rect.top, TRUE);
+                int w = rect.right - rect.left;
+                int h = rect.bottom - rect.top;
+                // Prevent zero-size child window which causes black screen
+                if (w > 0 && h > 0) {
+                    MoveWindow(child_content_, rect.left, rect.top, w, h, TRUE);
+                }
             }
             return DefWindowProc(child_content_, uMsg, wParam, lParam);
         }

@@ -1,0 +1,137 @@
+name: Build Reboot Launcher (Winlator-Fixed)
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'gui/**'
+      - 'common/**'
+      - '.github/workflows/build.yml'
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+    inputs:
+      flutter_version:
+        description: 'Flutter SDK version'
+        required: false
+        default: '3.19.6'
+
+env:
+  FLUTTER_VERSION: ${{ github.event.inputs.flutter_version || '3.19.6' }}
+  BUILD_DIR: gui
+
+jobs:
+  build-windows:
+    name: Build Windows x64
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          lfs: true
+
+      - name: Setup Flutter ${{ env.FLUTTER_VERSION }}
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Flutter doctor
+        run: flutter doctor -v
+
+      - name: Get common dependencies
+        working-directory: common
+        run: dart pub get
+
+      - name: Get GUI dependencies
+        working-directory: gui
+        run: flutter pub get
+
+      - name: Generate localizations
+        working-directory: gui
+        run: flutter gen-l10n
+
+      - name: Build Windows
+        working-directory: gui
+        run: flutter build windows --release
+
+      - name: Prepare release artifacts
+        shell: pwsh
+        run: |
+          $buildDir = "gui\build\windows\x64\runner\Release"
+          $releaseDir = "Release-Reboot-Launcher"
+          New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
+
+          # Copy the built executable and all runtime files
+          Copy-Item -Path "$buildDir\*" -Destination $releaseDir -Recurse -Force
+
+          # Copy DLL dependencies
+          if (Test-Path "gui\dependencies\dlls") {
+            $dllDir = "$releaseDir\dlls"
+            New-Item -ItemType Directory -Force -Path $dllDir | Out-Null
+            Copy-Item -Path "gui\dependencies\dlls\*" -Destination $dllDir -Force
+          }
+
+          # Copy build tools (aria2c, 7zip, winrar)
+          if (Test-Path "gui\assets\build") {
+            $buildToolsDir = "$releaseDir\build"
+            New-Item -ItemType Directory -Force -Path $buildToolsDir | Out-Null
+            Copy-Item -Path "gui\assets\build\*" -Destination $buildToolsDir -Force
+          }
+
+          # Copy VC++ redistributable
+          if (Test-Path "gui\dependencies\redist\VC_redist.x64.exe") {
+            Copy-Item -Path "gui\dependencies\redist\VC_redist.x64.exe" -Destination $releaseDir -Force
+          }
+
+          # Copy backend assets (lawinserver.exe and all config files)
+          $backendDir = "$releaseDir\backend"
+          New-Item -ItemType Directory -Force -Path $backendDir | Out-Null
+          if (Test-Path "gui\assets\backend") {
+            Copy-Item -Path "gui\assets\backend\*" -Destination $backendDir -Recurse -Force
+          }
+
+          Write-Host "Release contents:"
+          Get-ChildItem -Path $releaseDir -Recurse | Select-Object FullName, Length
+
+      - name: Create ZIP archive
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "Release-Reboot-Launcher\*" -DestinationPath "Reboot-Launcher-Winlator-Fixed.zip" -Force
+          Write-Host "Archive created: Reboot-Launcher-Winlator-Fixed.zip"
+          $size = (Get-Item "Reboot-Launcher-Winlator-Fixed.zip").Length / 1MB
+          Write-Host "Archive size: $([math]::Round($size, 2)) MB"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Reboot-Launcher-Windows-x64
+          path: Reboot-Launcher-Winlator-Fixed.zip
+          retention-days: 30
+
+      - name: Upload release on tag
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Reboot-Launcher-Winlator-Fixed.zip
+          name: "Reboot Launcher ${{ github.ref_name }} (Winlator Fixed)"
+          body: |
+            ## Winlator Black Screen Fix Release
+
+            This build includes fixes for running Reboot Launcher on **Winlator** (Android Windows emulator):
+
+            ### Changes
+            - **Wine/Winlator detection**: Automatically detects Wine environment via `ntdll!wine_get_version` (C++) and `Platform.operatingSystemVersion` (Dart)
+            - **Acrylic effect disabled on Wine**: `flutter_acrylic` DWM APIs are skipped entirely, preventing composition failures
+            - **Opaque backgrounds**: Transparent/Mica backgrounds replaced with solid colors on Wine (dark: `#202020`, light: `#F3F3F3`)
+            - **DPI scaling fix**: Forced to 1.0x on Wine to prevent incorrect window sizing
+            - **Zero-size window guard**: Prevents `MoveWindow` with zero dimensions in `WM_SIZE` handler
+            - **Forced surface repaint**: `ShowWindow` + `UpdateWindow` + `InvalidateRect` called on Wine to ensure first frame renders
+            - **Flutter surface size fallback**: If client area reports zero size, defaults to 1280x720
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

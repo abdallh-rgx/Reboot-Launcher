@@ -32,6 +32,17 @@ const String kCustomUrlSchema = "Reboot";
 Version? appVersion;
 bool appWithNoStorage = false;
 
+/// Detects if the app is running under Wine/Winlator/Proton
+/// Wine adds its version string to the OS version, e.g. "Microsoft Windows [Version 10.0.20348.1] (Wine 8.0)"
+bool get isWine {
+  try {
+    final version = Platform.operatingSystemVersion.toLowerCase();
+    return version.contains('wine') || version.contains('winlator') || version.contains('proton');
+  } catch (_) {
+    return false;
+  }
+}
+
 void main() {
   log("[APP] Called");
   runZonedGuarded(
@@ -124,7 +135,12 @@ Future<void> _startApp() async {
           try {
             await SystemTheme.accentColor.load();
             await windowManager.ensureInitialized();
-            await Window.initialize();
+            // Skip Window.initialize() and acrylic effects on Wine/Winlator
+            // These use DWM composition APIs that Wine does not support,
+            // causing a completely black window
+            if (!isWine) {
+              await Window.initialize();
+            }
             if(settingsController != null) {
               final size = Size(settingsController.width, settingsController.height);
               await windowManager.setSize(size);
@@ -142,7 +158,8 @@ Future<void> _startApp() async {
             }
             await windowManager.setPreventClose(true);
             await windowManager.setResizable(true);
-            if(isWin11) {
+            // Only apply acrylic on native Win11 (not Wine/Winlator)
+            if(!isWine && isWin11) {
               await Window.setEffect(
                   effect: WindowEffect.acrylic,
                   color: Colors.green,
@@ -209,6 +226,10 @@ class _RebootApplicationState extends State<RebootApplication> {
       brightness: brightness,
       accentColor: SystemTheme.accentColor.accent.toAccentColor(),
       visualDensity: VisualDensity.standard,
-      scaffoldBackgroundColor: Colors.transparent
+      // Use opaque background on Wine/Winlator to avoid black screen
+      // Wine cannot composite transparent windows properly
+      scaffoldBackgroundColor: isWine
+          ? (brightness == Brightness.dark ? const Color(0xFF202020) : const Color(0xFFF3F3F3))
+          : Colors.transparent
   );
 }

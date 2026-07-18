@@ -13,6 +13,7 @@ import 'package:reboot_launcher/src/controller/game_controller.dart';
 import 'package:reboot_launcher/src/controller/hosting_controller.dart';
 import 'package:reboot_launcher/src/controller/server_browser_controller.dart';
 import 'package:reboot_launcher/src/controller/settings_controller.dart';
+import 'package:reboot_launcher/src/main.dart' show isWine;
 import 'package:reboot_launcher/src/pager/page_suggestion.dart';
 import 'package:reboot_launcher/src/util/matchmaker.dart';
 import 'package:reboot_launcher/src/util/os.dart';
@@ -260,8 +261,15 @@ class _RebootPagerState extends State<RebootPager> with WindowListener, Automati
     super.build(context);
     _settingsController.language.value;
     loadTranslations(context);
+    // On Wine/Winlator, use opaque solid background instead of semi-transparent Mica
+    // because Wine cannot render layered/transparent windows properly (causes black screen)
+    final bgColor = isWine
+        ? (_settingsController.themeMode.value == ThemeMode.dark
+            || (_settingsController.themeMode.value == ThemeMode.system && isDarkMode)
+            ? const Color(0xFF202020) : const Color(0xFFF3F3F3))
+        : FluentTheme.of(context).micaBackgroundColor.withOpacity(0.93);
     return Container(
-        color: FluentTheme.of(context).micaBackgroundColor.withOpacity(0.93),
+        color: bgColor,
         child: Navigator(
           key: appNavigatorKey,
           onPopPage: (page, data) => false,

@@ -4,6 +4,13 @@
 
 #include "flutter/generated_plugin_registrant.h"
 
+// Detect Wine at C++ level
+static bool IsRunningUnderWine() {
+    HMODULE ntdll = GetModuleHandleA("ntdll.dll");
+    if (!ntdll) return false;
+    return GetProcAddress(ntdll, "wine_get_version") != nullptr;
+}
+
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
 
@@ -15,17 +22,36 @@ bool FlutterWindow::OnCreate() {
   }
 
   RECT frame = GetClientArea();
+  int width = frame.right - frame.left;
+  int height = frame.bottom - frame.top;
+
+  // On Wine/Winlator, ensure the child window has valid non-zero dimensions
+  // A zero-size surface causes the Flutter engine to render nothing (black screen)
+  if (IsRunningUnderWine()) {
+    if (width <= 0) width = 1280;
+    if (height <= 0) height = 720;
+  }
 
   // The size here must match the window dimensions to avoid unnecessary surface
   // creation / destruction in the startup path.
   flutter_controller_ = std::make_unique<flutter::FlutterViewController>(
-      frame.right - frame.left, frame.bottom - frame.top, project_);
+      width, height, project_);
   // Ensure that basic setup of the controller was successful.
   if (!flutter_controller_->engine() || !flutter_controller_->view()) {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
+
+  // On Wine/Winlator, force a resize after setting child content
+  // This ensures the Flutter surface fills the window correctly
+  if (IsRunningUnderWine()) {
+    frame = GetClientArea();
+    HWND child = flutter_controller_->view()->GetNativeWindow();
+    MoveWindow(child, frame.left, frame.top,
+               frame.right - frame.left, frame.bottom - frame.top, TRUE);
+  }
+
   return true;
 }
 
