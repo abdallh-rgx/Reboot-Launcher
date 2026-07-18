@@ -14,10 +14,10 @@ on:
       flutter_version:
         description: 'Flutter SDK version'
         required: false
-        default: '3.29.0'
+        default: '3.44.6'
 
 env:
-  FLUTTER_VERSION: ${{ github.event.inputs.flutter_version || '3.29.0' }}
+  FLUTTER_VERSION: ${{ github.event.inputs.flutter_version || '3.44.6' }}
   BUILD_DIR: gui
 
 jobs:
