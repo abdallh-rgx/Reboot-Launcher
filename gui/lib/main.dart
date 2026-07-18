@@ -32,17 +32,6 @@ const String kCustomUrlSchema = "Reboot";
 Version? appVersion;
 bool appWithNoStorage = false;
 
-/// Detects if the app is running under Wine/Winlator/Proton
-/// Wine adds its version string to the OS version, e.g. "Microsoft Windows [Version 10.0.20348.1] (Wine 8.0)"
-bool get isWine {
-  try {
-    final version = Platform.operatingSystemVersion.toLowerCase();
-    return version.contains('wine') || version.contains('winlator') || version.contains('proton');
-  } catch (_) {
-    return false;
-  }
-}
-
 void main() {
   log("[APP] Called");
   runZonedGuarded(

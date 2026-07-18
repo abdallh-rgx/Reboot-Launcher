@@ -24,6 +24,16 @@ bool get isWin11 {
   return intBuild != null && intBuild > 22000;
 }
 
+/// Detects if the app is running under Wine/Winlator/Proton
+bool get isWine {
+  try {
+    final version = Platform.operatingSystemVersion.toLowerCase();
+    return version.contains('wine') || version.contains('winlator') || version.contains('proton');
+  } catch (_) {
+    return false;
+  }
+}
+
 Future<String?> openFolderPicker(String title) async {
   FilePicker.platform = FilePickerWindows();
   return await FilePicker.platform.getDirectoryPath(dialogTitle: title);
@@ -44,7 +54,7 @@ Future<String?> openFilePicker(String extension) async {
 }
 
 bool get isDarkMode =>
-    SchedulerBinding.instance.platformDispatcher.platformBrightness.isDark;
+    SchedulerBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
 
 extension WindowManagerExtension on WindowManager {
   Future<void> maximizeOrRestore() async => await windowManager.isMaximized() ? windowManager.restore() : windowManager.maximize();

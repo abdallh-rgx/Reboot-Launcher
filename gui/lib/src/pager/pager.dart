@@ -13,7 +13,6 @@ import 'package:reboot_launcher/src/controller/game_controller.dart';
 import 'package:reboot_launcher/src/controller/hosting_controller.dart';
 import 'package:reboot_launcher/src/controller/server_browser_controller.dart';
 import 'package:reboot_launcher/src/controller/settings_controller.dart';
-import 'package:reboot_launcher/src/main.dart' show isWine;
 import 'package:reboot_launcher/src/pager/page_suggestion.dart';
 import 'package:reboot_launcher/src/util/matchmaker.dart';
 import 'package:reboot_launcher/src/util/os.dart';

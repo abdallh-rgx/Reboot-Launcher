@@ -19,6 +19,10 @@ const String kRebootBelowS20DownloadUrl =
 const String kRebootAboveS20DownloadUrl =
     "https://nightly.link/Milxnor/Project-Reboot-3.0/workflows/msbuild/master/RebootS20.zip";
 
+// Fallback URLs used when the primary download fails
+const String _kRebootBelowS20FallbackDownloadUrl = kRebootBelowS20DownloadUrl;
+const String _kRebootAboveS20FallbackDownloadUrl = kRebootAboveS20DownloadUrl;
+
 const String kStopBuildDownloadSignal = "kill";
 
 final int _ariaPort = 6800;
